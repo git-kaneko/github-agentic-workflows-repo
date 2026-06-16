@@ -7,7 +7,9 @@ on:
 # labeled イベントは全ラベルで発火するため、"ai-agent" のときだけ実行する
 if: ${{ github.event.label.name == 'ai-agent' }}
 
-engine: gemini
+engine:
+  id: claude
+  model: claude-sonnet-4-6
 
 # エージェント本体は読み取り専用。書き込みは safe-outputs 経由でのみ行う。
 permissions:
