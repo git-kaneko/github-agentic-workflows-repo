@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TODO</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #222; }
+    h1 { font-size: 1.4rem; }
+    .add { display: flex; gap: 8px; margin-bottom: 16px; }
+    .add input { flex: 1; padding: 8px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
+    .add button { padding: 8px 16px; font-size: 1rem; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+    ul { list-style: none; padding: 0; }
+    li { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid #eee; }
+    li .title { flex: 1; }
+    li.done .title { text-decoration: line-through; color: #999; }
+    li button { border: 0; background: none; color: #dc2626; cursor: pointer; font-size: 0.9rem; }
+    .empty { color: #999; padding: 16px 4px; }
+  </style>
+</head>
+<body>
+  <h1>TODO</h1>
+  <div class="add">
+    <input id="title" type="text" placeholder="やることを入力" autofocus />
+    <button id="addBtn">追加</button>
+  </div>
+  <ul id="list"></ul>
+
+  <script>
+    const api = '/todos';
+    const listEl = document.getElementById('list');
+    const titleEl = document.getElementById('title');
+
+    async function load() {
+      const todos = await fetch(api).then(r => r.json());
+      listEl.innerHTML = '';
+      if (todos.length === 0) {
+        listEl.innerHTML = '<li class="empty">まだ TODO はありません</li>';
+        return;
+      }
+      for (const t of todos) {
+        const li = document.createElement('li');
+        if (t.done) li.classList.add('done');
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = t.done;
+        cb.onchange = () => toggle(t);
+
+        const span = document.createElement('span');
+        span.className = 'title';
+        span.textContent = t.title;
+
+        const del = document.createElement('button');
+        del.textContent = '削除';
+        del.onclick = () => remove(t.id);
+
+        li.append(cb, span, del);
+        listEl.appendChild(li);
+      }
+    }
+
+    async function add() {
+      const title = titleEl.value.trim();
+      if (!title) return;
+      await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      titleEl.value = '';
+      titleEl.focus();
+      load();
+    }
+
+    async function toggle(t) {
+      await fetch(`${api}/${t.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: t.title, done: !t.done }),
+      });
+      load();
+    }
+
+    async function remove(id) {
+      await fetch(`${api}/${id}`, { method: 'DELETE' });
+      load();
+    }
+
+    document.getElementById('addBtn').onclick = add;
+    titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+    load();
+  </script>
+</body>
+</html>
