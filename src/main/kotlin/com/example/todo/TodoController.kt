@@ -6,6 +6,11 @@ import org.springframework.web.bind.annotation.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+/** 統計情報レスポンス。 */
+data class TodoStats(
+    val pendingCount: Int,
+)
+
 /** TODO 1件を表すデータ。 */
 data class Todo(
     val id: Long,
@@ -29,6 +34,11 @@ class TodoController {
     /** 一覧取得。 */
     @GetMapping
     fun list(): List<Todo> = store.values.sortedBy { it.id }
+
+    /** 統計情報取得。 */
+    @GetMapping("/stats")
+    fun stats(): TodoStats =
+        TodoStats(pendingCount = store.values.count { !it.done })
 
     /** 1件取得。 */
     @GetMapping("/{id}")

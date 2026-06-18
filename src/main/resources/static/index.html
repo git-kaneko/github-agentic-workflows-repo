@@ -16,10 +16,12 @@
     li.done .title { text-decoration: line-through; color: #999; }
     li button { border: 0; background: none; color: #dc2626; cursor: pointer; font-size: 0.9rem; }
     .empty { color: #999; padding: 16px 4px; }
+    .pending-count { font-size: 0.9rem; color: #555; margin: -8px 0 16px; }
   </style>
 </head>
 <body>
   <h1>TODO</h1>
+  <p id="pending-count" class="pending-count"></p>
   <div class="add">
     <input id="title" type="text" placeholder="やることを入力" autofocus />
     <button id="addBtn">追加</button>
@@ -60,6 +62,11 @@
       }
     }
 
+    async function loadStats() {
+      const stats = await fetch(`${api}/stats`).then(r => r.json());
+      document.getElementById('pending-count').textContent = `未完了: ${stats.pendingCount}件`;
+    }
+
     async function add() {
       const title = titleEl.value.trim();
       if (!title) return;
@@ -70,7 +77,7 @@
       });
       titleEl.value = '';
       titleEl.focus();
-      load();
+      load(); loadStats();
     }
 
     async function toggle(t) {
@@ -79,17 +86,17 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: t.title, done: !t.done }),
       });
-      load();
+      load(); loadStats();
     }
 
     async function remove(id) {
       await fetch(`${api}/${id}`, { method: 'DELETE' });
-      load();
+      load(); loadStats();
     }
 
     document.getElementById('addBtn').onclick = add;
     titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
-    load();
+    load(); loadStats();
   </script>
 </body>
 </html>
