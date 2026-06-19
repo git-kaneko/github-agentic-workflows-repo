@@ -16,12 +16,20 @@ data class Todo(
     val id: Long,
     val title: String,
     val done: Boolean = false,
+    val pinned: Boolean = false,
 )
 
 /** 作成・更新リクエストのボディ。 */
 data class TodoRequest(
     val title: String,
     val done: Boolean = false,
+    val pinned: Boolean = false,
+)
+
+/** 一覧レスポンス。ピン止め済みと通常に分けて返す。 */
+data class TodoListResponse(
+    val pinned: List<Todo>,
+    val todos: List<Todo>,
 )
 
 @RestController
@@ -33,7 +41,13 @@ class TodoController {
 
     /** 一覧取得。 */
     @GetMapping
-    fun list(): List<Todo> = store.values.sortedBy { it.id }
+    fun list(): TodoListResponse {
+        val snapshot = store.values.toList().sortedBy { it.id }
+        return TodoListResponse(
+            pinned = snapshot.filter { it.pinned },
+            todos = snapshot.filter { !it.pinned },
+        )
+    }
 
     /** 統計情報取得。 */
     @GetMapping("/stats")
@@ -50,7 +64,7 @@ class TodoController {
     @ResponseStatus(HttpStatus.CREATED)
     fun create(@RequestBody req: TodoRequest): Todo {
         val id = seq.incrementAndGet()
-        val todo = Todo(id = id, title = req.title, done = req.done)
+        val todo = Todo(id = id, title = req.title, done = req.done, pinned = req.pinned)
         store[id] = todo
         return todo
     }
@@ -59,7 +73,16 @@ class TodoController {
     @PutMapping("/{id}")
     fun update(@PathVariable id: Long, @RequestBody req: TodoRequest): ResponseEntity<Todo> {
         if (!store.containsKey(id)) return ResponseEntity.notFound().build()
-        val updated = Todo(id = id, title = req.title, done = req.done)
+        val updated = Todo(id = id, title = req.title, done = req.done, pinned = req.pinned)
+        store[id] = updated
+        return ResponseEntity.ok(updated)
+    }
+
+    /** ピン状態のトグル。 */
+    @PatchMapping("/{id}/pin")
+    fun togglePin(@PathVariable id: Long): ResponseEntity<Todo> {
+        val todo = store[id] ?: return ResponseEntity.notFound().build()
+        val updated = todo.copy(pinned = !todo.pinned)
         store[id] = updated
         return ResponseEntity.ok(updated)
     }
