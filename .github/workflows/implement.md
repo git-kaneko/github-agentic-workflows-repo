@@ -13,6 +13,11 @@ engine:
   model: claude-sonnet-4-6
   # ハード上限(1): エージェントの総ターン数（消費コストを直接キャップ／暴走保険）
   max-turns: 120
+  # プロンプトキャッシュの TTL を 1 時間に延長（API キー利用時の既定は 5 分）。
+  # 注: Claude Code が付ける cache_control が api-proxy を通過する場合に効く。
+  #     proxy 側の cache breakpoint 注入(anthropicAutoCache)が無効だと効果は限定的。
+  env:
+    ENABLE_PROMPT_CACHING_1H: "1"
 
 # ハード上限(2): ジョブ全体の時間上限。これを超えると強制終了する。
 timeout-minutes: 35
