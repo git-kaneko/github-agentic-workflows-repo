@@ -7,16 +7,23 @@
   <style>
     body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #222; }
     h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.1rem; margin: 20px 0 8px; color: #444; }
     .add { display: flex; gap: 8px; margin-bottom: 16px; }
     .add input { flex: 1; padding: 8px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
     .add button { padding: 8px 16px; font-size: 1rem; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+    .add-options { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.9rem; }
     ul { list-style: none; padding: 0; }
     li { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid #eee; }
     li .title { flex: 1; }
     li.done .title { text-decoration: line-through; color: #999; }
-    li button { border: 0; background: none; color: #dc2626; cursor: pointer; font-size: 0.9rem; }
+    li button { border: 0; background: none; cursor: pointer; font-size: 0.9rem; }
+    li .btn-del { color: #dc2626; }
+    li .btn-pin { color: #d97706; }
+    li .btn-pin.pinned { color: #f59e0b; font-weight: bold; }
     .empty { color: #999; padding: 16px 4px; }
     .pending-count { font-size: 0.9rem; color: #555; margin: -8px 0 16px; }
+    .section-pinned { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 4px 12px; margin-bottom: 16px; }
+    .section-pinned h2 { color: #92400e; }
   </style>
 </head>
 <body>
@@ -26,39 +33,75 @@
     <input id="title" type="text" placeholder="やることを入力" autofocus />
     <button id="addBtn">追加</button>
   </div>
+  <div class="add-options">
+    <input id="pinOnAdd" type="checkbox" />
+    <label for="pinOnAdd">ピン止めして追加</label>
+  </div>
+
+  <div id="section-pinned" class="section-pinned" style="display:none">
+    <h2>📌 ピン止め</h2>
+    <ul id="list-pinned"></ul>
+  </div>
+
+  <h2>TODO リスト</h2>
   <ul id="list"></ul>
 
   <script>
     const api = '/todos';
     const listEl = document.getElementById('list');
+    const listPinnedEl = document.getElementById('list-pinned');
+    const sectionPinned = document.getElementById('section-pinned');
     const titleEl = document.getElementById('title');
 
+    function buildItem(t) {
+      const li = document.createElement('li');
+      if (t.done) li.classList.add('done');
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = t.done;
+      cb.onchange = () => toggle(t);
+
+      const span = document.createElement('span');
+      span.className = 'title';
+      span.textContent = t.title;
+
+      const pin = document.createElement('button');
+      pin.className = 'btn-pin' + (t.pinned ? ' pinned' : '');
+      pin.textContent = t.pinned ? '📌' : '📍';
+      pin.title = t.pinned ? 'ピン解除' : 'ピン止め';
+      pin.onclick = () => togglePin(t.id);
+
+      const del = document.createElement('button');
+      del.className = 'btn-del';
+      del.textContent = '削除';
+      del.onclick = () => remove(t.id);
+
+      li.append(cb, span, pin, del);
+      return li;
+    }
+
     async function load() {
-      const todos = await fetch(api).then(r => r.json());
+      const data = await fetch(api).then(r => r.json());
+      const pinned = data.pinned || [];
+      const todos = data.todos || [];
+
+      listPinnedEl.innerHTML = '';
       listEl.innerHTML = '';
-      if (todos.length === 0) {
-        listEl.innerHTML = '<li class="empty">まだ TODO はありません</li>';
-        return;
+
+      if (pinned.length > 0) {
+        sectionPinned.style.display = '';
+        for (const t of pinned) listPinnedEl.appendChild(buildItem(t));
+      } else {
+        sectionPinned.style.display = 'none';
       }
-      for (const t of todos) {
-        const li = document.createElement('li');
-        if (t.done) li.classList.add('done');
 
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = t.done;
-        cb.onchange = () => toggle(t);
-
-        const span = document.createElement('span');
-        span.className = 'title';
-        span.textContent = t.title;
-
-        const del = document.createElement('button');
-        del.textContent = '削除';
-        del.onclick = () => remove(t.id);
-
-        li.append(cb, span, del);
-        listEl.appendChild(li);
+      if (todos.length === 0 && pinned.length === 0) {
+        listEl.innerHTML = '<li class="empty">まだ TODO はありません</li>';
+      } else if (todos.length === 0) {
+        listEl.innerHTML = '<li class="empty">通常 TODO はありません</li>';
+      } else {
+        for (const t of todos) listEl.appendChild(buildItem(t));
       }
     }
 
@@ -70,10 +113,11 @@
     async function add() {
       const title = titleEl.value.trim();
       if (!title) return;
+      const pinned = document.getElementById('pinOnAdd').checked;
       await fetch(api, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ title, pinned }),
       });
       titleEl.value = '';
       titleEl.focus();
@@ -84,8 +128,13 @@
       await fetch(`${api}/${t.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: t.title, done: !t.done }),
+        body: JSON.stringify({ title: t.title, done: !t.done, pinned: t.pinned }),
       });
+      load(); loadStats();
+    }
+
+    async function togglePin(id) {
+      await fetch(`${api}/${id}/pin`, { method: 'PATCH' });
       load(); loadStats();
     }
 
