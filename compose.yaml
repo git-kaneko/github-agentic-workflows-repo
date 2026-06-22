@@ -1,0 +1,24 @@
+# ローカル開発・CI(Agentic Workflow) 共通の MySQL 起動定義。
+# `docker compose up --wait` で healthcheck が通る（= 接続可能）まで待てる。
+# アプリ／テストの接続先（application.properties の既定）と資格情報を合わせている。
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: todo
+      MYSQL_USER: todo
+      MYSQL_PASSWORD: todo
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      # ローカルではデータを保持（`down` で残る / `down -v` で破棄）。CI は -v 付きで使い捨て。
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-utodo", "-ptodo"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mysql-data:
