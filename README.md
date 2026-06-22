@@ -1,20 +1,33 @@
 # todo-app
 
-Kotlin + Spring Boot による簡易 TODO アプリ（REST API、インメモリ保存）。
+Kotlin + Spring Boot による簡易 TODO アプリ（REST API、MySQL + Spring Data JPA で永続化）。
 
 ## 必要環境
 
 - JDK 17
+- Docker（MySQL を起動するため）
 
 Gradle は同梱の Wrapper (`./gradlew`) を使うためインストール不要。
 
 ## 起動
 
+MySQL を起動してからアプリを起動する。MySQL の定義は `compose.yaml` にある。
+
 ```bash
+docker compose up --wait   # MySQL を起動（接続可能になるまで待つ）
 ./gradlew bootRun
 ```
 
-`http://localhost:8080` で起動する。
+`http://localhost:8080` で起動する。接続先は `application.properties` の既定（`localhost:3306/todo`、ユーザー/パスワード `todo`）。停止は `docker compose down`（データ保持）/ `docker compose down -v`（データ破棄）。
+
+## テスト
+
+MySQL に対する統合テストを含むため、MySQL を起動し `RUN_DB_TESTS=1` を付けて実行する（未設定時は DB 依存テストをスキップ）。
+
+```bash
+docker compose up --wait
+RUN_DB_TESTS=1 ./gradlew test
+```
 
 ## API
 
@@ -58,4 +71,4 @@ curl -s -X DELETE localhost:8080/todos/1 -i
 
 ## 注意
 
-データはインメモリ（`ConcurrentHashMap`）保存のため、再起動で消える。
+データは MySQL に永続化される。スキーマは起動時に Hibernate の `ddl-auto=update` で自動生成・更新される。
