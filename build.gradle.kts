@@ -3,6 +3,8 @@ plugins {
     id("io.spring.dependency-management") version "1.1.5"
     kotlin("jvm") version "1.9.24"
     kotlin("plugin.spring") version "1.9.24"
+    // JPA エンティティに no-arg コンストラクタを合成し、open 化する（Hibernate 要件）。
+    kotlin("plugin.jpa") version "1.9.24"
     id("io.gitlab.arturbosch.detekt") version "1.23.8"
 }
 
@@ -19,8 +21,10 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    runtimeOnly("com.mysql:mysql-connector-j")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
