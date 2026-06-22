@@ -114,23 +114,24 @@ safe-outputs:
       ```
    - SQL が 1 件も捕捉できなければ「EXPLAIN 対象の SELECT 無し」として手順6で簡潔に報告し終了する。
 
-4. **EXPLAIN 実行**: 捕捉した各 SELECT に対して EXPLAIN を実行し、**出力 JSON の全文を取得する**（抜粋しない）。
+4. **EXPLAIN 実行**: 捕捉した各 SELECT に対し、**計画（FORMAT=JSON）と実測（ANALYZE）の両方**を実行し、それぞれ**全文を取得する**（抜粋しない）。ANALYZE は対象が SELECT のみなのでデータは変わらない。
    ```bash
+   # 計画（見積もり）
    mysql -h127.0.0.1 -uroot -proot -e "EXPLAIN FORMAT=JSON <SQL>;" todo
-   # MySQL 8.0 なら実測込みの EXPLAIN ANALYZE も可:
-   # mysql -h127.0.0.1 -uroot -proot -e "EXPLAIN ANALYZE <SQL>;" todo
+   # 実測（MySQL 8.0 は TREE 形式。actual rows / actual time が出る）
+   mysql -h127.0.0.1 -uroot -proot -e "EXPLAIN ANALYZE <SQL>;" todo
    ```
 
-5. **レビュー観点の付与**: 各 EXPLAIN 結果を読み、次の観点で注意点を拾う。
+5. **レビュー（`explain-reviewer` サブエージェントに委譲）**: 各 SQL の「生 SQL・EXPLAIN(FORMAT=JSON) 全文・EXPLAIN ANALYZE 全文」を **`explain-reviewer` サブエージェント**に渡し、次の観点での指摘を受け取る。
    - `type: ALL`（フルテーブルスキャン）になっていないか
    - `key: NULL` / `possible_keys: NULL`（インデックス未使用）になっていないか
-   - `rows`（走査見込み行数）が想定よりも過大でないか
-   - `Using filesort` / `Using temporary` が出ていないか
+   - `rows`（見積もり行数）と ANALYZE の `actual rows`（実測）の**乖離**が大きくないか
+   - `Using filesort` / `Using temporary`、ANALYZE の `actual time` が突出していないか
 
 6. **PR コメント**: 結果を Markdown で **add-comment** に出力する。差分検知（手順1）で対象有りと判定した場合のみ投稿する。本文には次を含める:
    - 対象とした変更（どの Entity/Repository/SQL が変わったか）
-   - 各 SQL について、**生 SQL** と **`EXPLAIN FORMAT=JSON` の結果全文**。JSON は ```json コードブロックに**そのまま貼る**。要点だけの抜粋・要約・省略・`<details>` 折りたたみはしない（読み手が完全な実行計画を見られるようにする）
-   - 上記観点での **気になる点**（無ければ「特になし」）。これは全文 JSON への補足であって、JSON 本体を置き換えるものではない
+   - 各 SQL について、**生 SQL** と **`EXPLAIN FORMAT=JSON` の結果全文**、および **`EXPLAIN ANALYZE` の結果全文**。どちらもコードブロックに**そのまま貼る**。要点だけの抜粋・要約・省略・`<details>` 折りたたみはしない（読み手が完全な実行計画を見られるようにする）
+   - `explain-reviewer` サブエージェントの **レビュー指摘**（観点・該当 SQL・内容）。無ければ「特になし」。これは全文への補足であって、EXPLAIN/ANALYZE 本体を置き換えるものではない
    - 末尾に「これは自動生成のヒントであり、最終判断は人間が行う」旨の注記
 
 7. **後始末**: `docker compose down -v` で MySQL を必ず破棄する（ボリュームごと使い捨て）。
@@ -140,5 +141,19 @@ safe-outputs:
 - **差分に ORM のテーブル操作変更が無ければ何も出力しない**（ノイズを出さない）。
 - このワークフローは **コードを変更しない**（EXPLAIN と報告のみ）。
 - MySQL は `compose.yaml` で起動し、終了時に必ず `docker compose down -v` で破棄する。
+- `EXPLAIN ANALYZE` はクエリを実行するが、対象は SELECT のみ（手順3でフィルタ済み）なのでデータは変更しない。
+- レビューの判断は `explain-reviewer` サブエージェントに委譲し、親は EXPLAIN/ANALYZE の取得と PR コメントへの全文掲載に専念する。
 - EXPLAIN の失敗（構文・接続）でジョブ全体を落とさず、失敗した SQL はその旨を添えて続行する。
 - 推測と事実を区別する。出力は日本語で記述する。
+
+## agent: `explain-reviewer`
+---
+model: claude-sonnet-4-6
+description: MySQL の EXPLAIN(FORMAT=JSON) と EXPLAIN ANALYZE を読み、フルスキャン・インデックス未使用・見積もりと実測の乖離を指摘する
+---
+
+あなたは MySQL の実行計画レビュアーです。親エージェントから渡された、各 SQL の **生 SQL**・**`EXPLAIN FORMAT=JSON` の全文**・**`EXPLAIN ANALYZE` の全文** を読み、次の観点でレビューしてください。
+
+レビュー観点 — (1) **フルスキャン**: `access_type` / `type` が `ALL` になっていないか。(2) **インデックス未使用**: `key` が `NULL`、または `possible_keys` があるのに使われていないか。(3) **見積もりと実測の乖離**: FORMAT=JSON の見積もり `rows` と、ANALYZE の `actual rows` が大きく乖離していないか（統計の古さ・誤推定の兆候）。(4) **追加コスト**: `Using filesort` / `Using temporary` が出ていないか、ANALYZE の `actual time` が突出していないか。
+
+出力フォーマット — SQL ごとに `- [観点] 指摘内容 — 根拠（EXPLAIN/ANALYZE の該当値）と推奨` の形式で簡潔に列挙する。問題が無い SQL は「特になし」とする。憶測を避け、渡された EXPLAIN/ANALYZE の具体値を根拠に示すこと。出力は日本語で記述する。
