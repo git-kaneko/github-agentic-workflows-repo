@@ -105,15 +105,16 @@ safe-outputs:
    1. `mysql -h127.0.0.1 -uroot -proot -e "SET GLOBAL general_log='ON'; SET GLOBAL log_output='TABLE';"` でクエリログを有効化する（`SET GLOBAL` は root 権限が必要）。
    2. `./gradlew test --no-daemon` でリポジトリのテストを実行する（`RUN_DB_TESTS` は設定済み）。テストは `application.properties` の既定で上記 MySQL に接続し、`ddl-auto` でスキーマを生成しつつ JPA に SQL を発行する。
    3. テストで投入されたデータに対し `mysql -h127.0.0.1 -uroot -proot -e "ANALYZE TABLE todos;" todo` で統計を更新する（EXPLAIN の精度向上のため）。
-   4. 発行された生 SQL を抽出する:
+   4. 発行された生 SQL を抽出する。重複と、`todos` に関係しない付随クエリ（Hikari の `SELECT 1` など）は除く。これは同じ EXPLAIN を何度も貼らないためのノイズ除去であり、各 EXPLAIN の**中身は手順6で全文を出す**:
       ```bash
       mysql -h127.0.0.1 -uroot -proot -N -e \
-        "SELECT argument FROM mysql.general_log \
-         WHERE command_type='Query' AND argument LIKE 'SELECT%';" todo
+        "SELECT DISTINCT argument FROM mysql.general_log \
+         WHERE command_type='Query' AND argument LIKE 'SELECT%' \
+           AND argument LIKE '%todos%';" todo
       ```
    - SQL が 1 件も捕捉できなければ「EXPLAIN 対象の SELECT 無し」として手順6で簡潔に報告し終了する。
 
-4. **EXPLAIN 実行**: 捕捉した各 SELECT に対して EXPLAIN を実行する。
+4. **EXPLAIN 実行**: 捕捉した各 SELECT に対して EXPLAIN を実行し、**出力 JSON の全文を取得する**（抜粋しない）。
    ```bash
    mysql -h127.0.0.1 -uroot -proot -e "EXPLAIN FORMAT=JSON <SQL>;" todo
    # MySQL 8.0 なら実測込みの EXPLAIN ANALYZE も可:
@@ -128,8 +129,8 @@ safe-outputs:
 
 6. **PR コメント**: 結果を Markdown で **add-comment** に出力する。差分検知（手順1）で対象有りと判定した場合のみ投稿する。本文には次を含める:
    - 対象とした変更（どの Entity/Repository/SQL が変わったか）
-   - 各 SQL の **生 SQL** と **EXPLAIN 結果**（コードブロック）
-   - 上記観点での **気になる点**（無ければ「特になし」）
+   - 各 SQL について、**生 SQL** と **`EXPLAIN FORMAT=JSON` の結果全文**。JSON は ```json コードブロックに**そのまま貼る**。要点だけの抜粋・要約・省略・`<details>` 折りたたみはしない（読み手が完全な実行計画を見られるようにする）
+   - 上記観点での **気になる点**（無ければ「特になし」）。これは全文 JSON への補足であって、JSON 本体を置き換えるものではない
    - 末尾に「これは自動生成のヒントであり、最終判断は人間が行う」旨の注記
 
 7. **後始末**: `docker compose down -v` で MySQL を必ず破棄する（ボリュームごと使い捨て）。
